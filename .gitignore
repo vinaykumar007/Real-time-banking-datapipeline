@@ -208,6 +208,7 @@ tempCodeRunnerFile.py
 
 # PyPI configuration file
 .pypirc
+banking_data_pipeline/profiles.yml
 
 # Marimo
 marimo/_static/

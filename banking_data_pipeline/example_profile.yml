@@ -1,0 +1,13 @@
+banking_data_pipeline:
+  outputs:
+    dev:
+      account: 888888888888
+      database: banking
+      password: 9999999999999
+      role: 99999
+      schema: dbt_schema
+      threads: 1
+      type: snowflake
+      user: 5555555555
+      warehouse: COMPUTE_WH
+  target: dev
