@@ -36,6 +36,9 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+kafka-debezium/postgres-connector.json
+kafka-debezium/env.txt
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
