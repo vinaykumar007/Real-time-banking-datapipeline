@@ -68,6 +68,468 @@ Data Generator (Faker)
 
 ---
 
+# Change Data Capture (CDC) Workflow
+
+## Overview
+
+This project implements a real-time Change Data Capture (CDC) pipeline using PostgreSQL, Debezium, and Apache Kafka.
+
+Instead of polling the database for changes, Debezium reads PostgreSQL's Write Ahead Log (WAL) and streams inserts, updates, and deletes directly into Kafka topics.
+
+```text
+PostgreSQL
+     │
+     ▼
+Write Ahead Log (WAL)
+     │
+     ▼
+Logical Replication
+     │
+     ▼
+Debezium Connector
+     │
+     ▼
+Kafka Topics
+     │
+     ▼
+Consumers (PySpark / Airflow / Analytics)
+```
+
+---
+
+## Why CDC?
+
+Traditional ETL pipelines often use polling:
+
+```sql
+SELECT *
+FROM transactions
+WHERE created_at > last_run_time;
+```
+
+This approach introduces:
+
+* High database load
+* Increased latency
+* Risk of missing updates
+* Scalability limitations
+
+CDC solves these problems by streaming only changed records in real time.
+
+---
+
+## PostgreSQL Configuration
+
+CDC requires PostgreSQL Logical Replication.
+
+The PostgreSQL container is configured with:
+
+```yaml
+command:
+  - postgres
+  - -c
+  - wal_level=logical
+```
+
+Verify:
+
+```sql
+SHOW wal_level;
+```
+
+Expected:
+
+```text
+logical
+```
+
+---
+
+## Replication User
+
+Debezium requires a replication-enabled PostgreSQL user.
+
+Verify:
+
+```sql
+SELECT rolname, rolreplication
+FROM pg_roles
+WHERE rolname = 'banking_admin';
+```
+
+Expected:
+
+```text
+banking_admin | t
+```
+
+---
+
+## Debezium Connector
+
+Debezium connects to PostgreSQL and reads changes from WAL.
+
+Connector configuration:
+
+```json
+{
+  "name": "postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "banking_admin",
+    "database.password": "********",
+    "database.dbname": "banking_db",
+    "topic.prefix": "banking_server",
+    "schema.include.list": "banking",
+    "table.include.list": "banking.customers,banking.accounts,banking.transactions",
+    "plugin.name": "pgoutput",
+    "slot.name": "banking_slot",
+    "publication.autocreate.mode": "filtered"
+  }
+}
+```
+
+---
+
+## Kafka Topics
+
+Debezium automatically creates CDC topics.
+
+### Business Topics
+
+```text
+banking_server.banking.customers
+banking_server.banking.accounts
+banking_server.banking.transactions
+```
+
+### Internal Kafka Connect Topics
+
+```text
+connect-configs
+connect-offsets
+connect-status
+```
+
+Purpose:
+
+| Topic           | Description                           |
+| --------------- | ------------------------------------- |
+| connect-configs | Stores connector configurations       |
+| connect-offsets | Stores CDC progress and WAL positions |
+| connect-status  | Stores connector state                |
+
+---
+
+## PostgreSQL Publication
+
+Debezium automatically creates a publication:
+
+```sql
+SELECT * FROM pg_publication;
+```
+
+Example:
+
+```text
+dbz_publication
+```
+
+The publication defines which tables participate in logical replication.
+
+---
+
+## Replication Slot
+
+Debezium creates a replication slot:
+
+```sql
+SELECT slot_name, active
+FROM pg_replication_slots;
+```
+
+Example:
+
+```text
+banking_slot | t
+```
+
+Replication slots ensure WAL records are not removed before Debezium consumes them.
+
+---
+
+## CDC Event Lifecycle
+
+### 1. Insert Event
+
+Application inserts a customer:
+
+```sql
+INSERT INTO banking.customers
+(
+    first_name,
+    last_name,
+    email
+)
+VALUES
+(
+    'VINAY',
+    'CDC',
+    'vinay_cdc@test.com'
+);
+```
+
+### 2. PostgreSQL WAL
+
+PostgreSQL writes the transaction to WAL.
+
+### 3. Debezium Reads WAL
+
+Debezium captures the change through logical replication.
+
+### 4. Kafka Event Produced
+
+Kafka topic:
+
+```text
+banking_server.banking.customers
+```
+
+receives:
+
+```json
+{
+  "before": null,
+  "after": {
+    "customer_id": 1001,
+    "first_name": "VINAY",
+    "last_name": "CDC",
+    "email": "vinay_cdc@test.com"
+  },
+  "op": "c"
+}
+```
+
+---
+
+## Debezium Event Structure
+
+A CDC event contains:
+
+```json
+{
+  "before": null,
+  "after": {...},
+  "source": {...},
+  "op": "c",
+  "ts_ms": 1782321575990
+}
+```
+
+### before
+
+Represents the row before the change.
+
+Example:
+
+```json
+"before": null
+```
+
+for inserts.
+
+---
+
+### after
+
+Represents the row after the change.
+
+Example:
+
+```json
+"after": {
+  "customer_id": 1001,
+  "first_name": "VINAY"
+}
+```
+
+---
+
+### op
+
+Operation type.
+
+| Code | Meaning         |
+| ---- | --------------- |
+| c    | Create (INSERT) |
+| u    | Update          |
+| d    | Delete          |
+| r    | Snapshot Record |
+
+---
+
+### source
+
+Metadata about the originating database.
+
+Example:
+
+```json
+{
+  "db": "banking_db",
+  "schema": "banking",
+  "table": "customers",
+  "txId": 765,
+  "lsn": 74589320
+}
+```
+
+---
+
+### ts_ms
+
+Timestamp when Debezium emitted the event.
+
+---
+
+## Example CDC Operations
+
+### Insert
+
+```sql
+INSERT INTO banking.customers (...);
+```
+
+Produces:
+
+```json
+{
+  "before": null,
+  "after": {...},
+  "op": "c"
+}
+```
+
+---
+
+### Update
+
+```sql
+UPDATE banking.customers
+SET first_name = 'UPDATED'
+WHERE customer_id = 1001;
+```
+
+Produces:
+
+```json
+{
+  "before": {...},
+  "after": {...},
+  "op": "u"
+}
+```
+
+---
+
+### Delete
+
+```sql
+DELETE FROM banking.customers
+WHERE customer_id = 1001;
+```
+
+Produces:
+
+```json
+{
+  "before": {...},
+  "after": null,
+  "op": "d"
+}
+```
+
+---
+
+## Validation Steps
+
+### Verify Connector
+
+```powershell
+Invoke-RestMethod http://localhost:8083/connectors/postgres-connector/status
+```
+
+Expected:
+
+```json
+{
+  "connector": {
+    "state": "RUNNING"
+  },
+  "tasks": [
+    {
+      "state": "RUNNING"
+    }
+  ]
+}
+```
+
+---
+
+### Verify Topics
+
+```bash
+kafka-topics --bootstrap-server localhost:9092 --list
+```
+
+Expected:
+
+```text
+banking_server.banking.customers
+banking_server.banking.accounts
+banking_server.banking.transactions
+```
+
+---
+
+### Verify Messages
+
+Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Navigate:
+
+```text
+Topics
+  └── banking_server.banking.customers
+         └── Messages
+```
+
+Insert or update records in PostgreSQL and observe CDC events appearing in Kafka.
+
+---
+
+## Key Learnings
+
+* PostgreSQL WAL-based CDC
+* Logical Replication
+* Debezium Source Connector
+* Kafka Connect Architecture
+* Kafka Topic Design
+* Replication Slots
+* Publications
+* Event-Driven Data Pipelines
+* Real-Time Data Streaming
+
+This CDC layer forms the foundation for the downstream Bronze → Silver → Gold Medallion Architecture implemented using PySpark Structured Streaming.
+
+---
+
 ## Current Project Status
 
 ### Phase 1: OLTP Foundation ✅
@@ -80,16 +542,16 @@ Data Generator (Faker)
 
 ### Phase 2: Data Generation 🚧
 
-* [ ] Faker-based customer generation
-* [ ] Account generation
-* [ ] Transaction generation
-* [ ] Bulk data loading
+* [x] Faker-based customer generation
+* [x] Account generation
+* [x] Transaction generation
+* [x] Bulk data loading
 
 ### Phase 3: CDC & Streaming
 
-* [ ] Debezium setup
-* [ ] Kafka cluster
-* [ ] CDC event validation
+* [x] Debezium setup
+* [x] Kafka cluster
+* [x] CDC event validation
 
 ### Phase 4: Data Lake
 
@@ -243,6 +705,31 @@ http://localhost:5050
 
 ---
 
+## Running the Data Generator
+
+Preferred (module):
+
+```bash
+# run from project root
+python -m data_generator.generate_data
+```
+
+Or run directly (supported):
+
+```bash
+python data_generator/generate_data.py
+```
+
+Note: The repository adds the project root to `sys.path` when the script is executed directly to make imports resolve; running with `-m` is the recommended approach.
+
+### Debezium connector note
+
+The Debezium connector script uses these environment variables:
+`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`.
+If `POSTGRES_HOST` or `POSTGRES_PORT` are not set, the script defaults to `postgres:5432` for container networking.
+
+---
+
 ## Learning Goals
 
 This project demonstrates practical experience with:
@@ -271,16 +758,3 @@ This project demonstrates practical experience with:
 
 ---
 
-### One suggestion
-
-Create a folder:
-
-```text
-docs/
-├── architecture/
-│   └── architecture.png
-├── erd/
-│   └── banking_oltp_erd.png
-```
-
-Then place your architecture diagram and ERD there and reference them in the README. That immediately makes the repository look like a professional portfolio project.

@@ -4,11 +4,20 @@ Generate realistic banking data and load it into PostgreSQL.
 
 import random
 from datetime import datetime
+import os
+import sys
 
 from faker import Faker
 from sqlalchemy import text
 
-from data_generator.database import db
+try:
+    from data_generator.database import db
+except ModuleNotFoundError:
+    # When running the script directly (python data_generator/generate_data.py)
+    # the package root may not be on sys.path. Add the project root so
+    # imports like `data_generator.database` resolve correctly.
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from data_generator.database import db
 
 fake = Faker()
 
