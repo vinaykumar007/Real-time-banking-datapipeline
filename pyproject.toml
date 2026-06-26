@@ -1,10 +1,14 @@
 [project]
 name = "real-time-banking-datapipeline"
 version = "0.1.0"
-description = "Add your description here"
+description = "Real-Time Banking Data Pipeline"
 readme = "README.md"
 requires-python = ">=3.12"
+
 dependencies = [
+    "azure-identity>=1.25.3",
+    "azure-storage-file-datalake>=12.25.0",
+    "confluent-kafka>=2.14.2",
     "dbt-core>=1.11.11",
     "dbt-snowflake>=1.11.5",
     "faker>=40.23.0",
@@ -12,3 +16,13 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.51",
 ]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
