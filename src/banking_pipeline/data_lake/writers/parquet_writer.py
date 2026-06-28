@@ -15,10 +15,10 @@ class ParquetWriter:
         self,
         directory: str,
         file_name: str,
-        data: dict,
+        events: list[dict],
     ) -> None:
 
-        table = pa.Table.from_pylist([data])
+        table = pa.Table.from_pylist(events)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             parquet_file = Path(temp_dir) / file_name

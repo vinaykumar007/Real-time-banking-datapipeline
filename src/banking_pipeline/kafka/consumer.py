@@ -3,6 +3,8 @@ from datetime import datetime
 import json
 
 from banking_pipeline.data_lake.bronze_writer import BronzeWriter
+from banking_pipeline.data_lake.buffer import EventBuffer
+from banking_pipeline.data_lake.config import BRONZE_BUFFER_SIZE
 
 from banking_pipeline.kafka.config import (
     KAFKA_AUTO_OFFSET_RESET,
@@ -20,6 +22,7 @@ CDC_OPERATIONS = {
 
 class KafkaConsumer:
     def __init__(self, topics: list[str]):
+        self.buffer = EventBuffer(max_size=BRONZE_BUFFER_SIZE)
         self.bronze_writer = BronzeWriter()
         self.consumer = Consumer(
             {
@@ -58,23 +61,31 @@ class KafkaConsumer:
                                  "offset": msg.offset(),
                                  "payload": payload,
                                  }
-                
-                
+                self.buffer.add(bronze_record)
+                if self.buffer.is_full():
+                    print(
+                        f"\n🚀 Buffer full ({self.buffer.size()} events). "
+                        f"Writing batch to ADLS..."
+                    )
 
-                self.bronze_writer.write(
-                                         table_name=table_name,
-                                                             data=bronze_record,
-                                        )
+                    self.bronze_writer.write(
+                        table_name=table_name,
+                        events=self.buffer.get_events(),
+                    )
 
-                
-                print(f"✅ Bronze event written")
-                print(f"Topic      : {msg.topic()}")
-                print(f"Table      : {table_name}")
-                operation = CDC_OPERATIONS.get(payload["op"], payload["op"])
+                    self.buffer.clear()
 
-                print(f"Operation  : {operation}")
-                print(f"Offset     : {msg.offset()}")
-                print("-" * 80)
+                    print("✅ Buffer cleared\n")
+
+                operation = CDC_OPERATIONS.get(
+                                               payload["op"],
+                                               payload["op"],)
+
+                print(
+                    f"📦 Buffered ({self.buffer.size()}/{self.buffer.max_size}) | "
+                    f"Table: {table_name} | "
+                    f"Operation: {operation}"
+                )
 
         except KeyboardInterrupt:
             print("\nStopping consumer...")

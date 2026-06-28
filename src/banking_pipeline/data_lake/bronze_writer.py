@@ -14,7 +14,7 @@ class BronzeWriter:
         else:
             self.writer = JSONWriter()
 
-    def write(self, table_name: str, data: dict) -> None:
+    def write(self, table_name: str,events: list[dict]) -> None:
         now = datetime.utcnow()
 
         directory = (
@@ -36,5 +36,5 @@ class BronzeWriter:
         self.writer.write(
             directory=directory,
             file_name=file_name,
-            data=data,
+            events=events,
         )
