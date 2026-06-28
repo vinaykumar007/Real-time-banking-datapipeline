@@ -4,6 +4,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+BRONZE_BUFFER_SIZE = int(
+    os.getenv(
+        "BRONZE_BUFFER_SIZE",
+        "100",
+    )
+)
+
 BRONZE_FILE_FORMAT = os.getenv(
     "BRONZE_FILE_FORMAT",
     "json",

@@ -70,9 +70,9 @@ Data Generator (Faker)
 
 ---
 
-# Change Data Capture (CDC) Workflow
+## Change Data Capture (CDC) Workflow
 
-## Overview
+### Overview
 
 This project implements a real-time Change Data Capture (CDC) pipeline using PostgreSQL, Debezium, and Apache Kafka.
 
@@ -653,15 +653,15 @@ Azure Data Lake
 
 ### Milestone: Bronze Layer v1 (Parquet)
 
-### Objective
+#### Objective
 
 Enhance the Bronze layer by replacing JSON-based event storage with Parquet while keeping the Kafka consumer and Bronze orchestration independent of the storage format.
 
 ---
 
-### Features Implemented
+#### Features Implemented
 
-#### Writer Architecture Refactor
+##### Writer Architecture Refactor
 
 Introduced a pluggable writer architecture:
 
@@ -682,7 +682,7 @@ Individual writers are responsible only for serializing and uploading data.
 
 ---
 
-#### Generic ADLS Uploader
+##### Generic ADLS Uploader
 
 Enhanced the uploader by introducing a generic `upload_file()` method capable of uploading any file type.
 
@@ -694,7 +694,7 @@ Supported uploads now include:
 
 ---
 
-#### PyArrow Integration
+##### PyArrow Integration
 
 Added PyArrow for Parquet serialization.
 
@@ -707,7 +707,7 @@ Implemented:
 
 ---
 
-#### Configuration Driven Output
+##### Configuration Driven Output
 
 Introduced:
 
@@ -724,6 +724,223 @@ BRONZE_FILE_FORMAT=parquet
 ```
 
 ---
+
+### Milestone: Bronze Layer v2 (Buffered Parquet Ingestion)
+
+#### Objective
+
+Optimize the Bronze ingestion layer by implementing an in-memory event buffer that batches multiple CDC events into a single Parquet file before uploading to Azure Data Lake Storage.
+
+This enhancement addresses the small-files problem commonly encountered in streaming data lakes.
+
+---
+
+##### Why Buffering?
+
+Initially, every Kafka CDC event generated its own Parquet file.
+
+```text
+1 Kafka Event
+        │
+        ▼
+1 Parquet File
+```
+
+Although functional, this approach creates thousands of small files under heavy workloads, leading to:
+
+* Increased metadata operations
+* Slower ingestion into downstream systems
+* Poor storage efficiency
+* Reduced query performance
+
+A production-grade ingestion pipeline batches events before persisting them.
+
+---
+
+###### New Micro-Batch Architecture
+
+The Bronze layer now follows a buffered ingestion model.
+
+```text
+Kafka Consumer
+        │
+        ▼
+Event Buffer
+        │
+        ▼
+Buffer Size Reached
+        │
+        ▼
+BronzeWriter
+        │
+        ▼
+ParquetWriter
+        │
+        ▼
+Azure Data Lake Storage
+```
+
+Instead of writing one file per event, multiple CDC events are written into a single Parquet file.
+
+---
+
+#### Features Implemented
+
+##### EventBuffer
+
+Introduced a dedicated `EventBuffer` component responsible for:
+
+* Collecting CDC events in memory
+* Tracking buffer size
+* Determining when the buffer is full
+* Returning buffered events
+* Clearing the buffer after a successful upload
+
+Separating buffering logic from the Kafka consumer improves maintainability and follows the Single Responsibility Principle.
+
+---
+
+### Configurable Buffer Size
+
+Introduced a configurable environment variable:
+
+```env
+BRONZE_BUFFER_SIZE=5
+```
+
+The consumer automatically flushes buffered events once the configured threshold is reached.
+
+The buffer size can be increased for production deployments without modifying application code.
+
+---
+
+### Refactored ParquetWriter
+
+Updated `ParquetWriter` to support batch writes.
+
+Previous interface:
+
+```python
+write(data)
+```
+
+New interface:
+
+```python
+write(events: list[dict])
+```
+
+This enables writing one or many events using the same implementation.
+
+---
+
+### Refactored BronzeWriter
+
+Updated `BronzeWriter` to work with batches of events instead of individual records while preserving:
+
+* Partitioned folder structure
+* Dynamic file naming
+* Configuration-driven file format selection
+
+---
+
+### Updated Kafka Consumer
+
+The Kafka consumer now:
+
+1. Reads CDC events from Kafka.
+2. Converts them into Bronze records.
+3. Buffers events in memory.
+4. Flushes the buffer once the configured threshold is reached.
+5. Uploads a single Parquet file containing multiple events.
+
+---
+
+## Validation
+
+Successfully verified the complete buffered ingestion workflow.
+
+Test performed:
+
+* Configured buffer size to **5**.
+* Inserted **5 customer records** into PostgreSQL.
+* Observed the consumer buffering events.
+* Confirmed automatic batch flush.
+* Verified a single Parquet file was created in Azure Data Lake.
+* Downloaded the Parquet file.
+* Read the file using PyArrow.
+* Confirmed the file contained all **5 CDC events**.
+
+---
+
+## Benefits
+
+Compared to writing one file per event, buffered ingestion provides:
+
+* Fewer files in Azure Data Lake
+* Improved storage efficiency
+* Better compression
+* Faster downstream ingestion
+* Improved Snowflake loading performance
+* Architecture aligned with production streaming systems
+
+---
+
+## Current Bronze Architecture
+
+```text
+PostgreSQL
+      │
+      ▼
+Debezium CDC
+      │
+      ▼
+Kafka
+      │
+      ▼
+Kafka Consumer
+      │
+      ▼
+EventBuffer
+      │
+      ▼
+BronzeWriter
+      │
+      ▼
+ParquetWriter
+      │
+      ▼
+Azure Data Lake Storage
+```
+
+---
+
+## Key Concepts Learned
+
+During this milestone, the following production data engineering concepts were implemented and validated:
+
+* Micro-batch processing
+* Event buffering
+* Small-files optimization
+* Configuration-driven application behavior
+* Separation of concerns
+* Pluggable writer architecture
+* Columnar storage using Parquet
+* Azure Data Lake ingestion
+
+---
+
+## Next Milestone
+
+Complete the Bronze layer by implementing time-based buffer flushing.
+
+The buffer should flush when either:
+
+* The configured buffer size is reached, or
+* A configurable time interval has elapsed.
+
+This ensures low-latency ingestion even during periods of low event volume and aligns the ingestion pipeline with production streaming architectures.
+
 
 ### Validation Performed
 
@@ -863,7 +1080,7 @@ Implement buffered Parquet writing to reduce the small-files problem by batching
 
 ---
 
-# Banking OLTP Data Model
+## Banking OLTP Data Model
 
 The operational database consists of three core banking entities:
 
@@ -1010,9 +1227,9 @@ If `POSTGRES_HOST` or `POSTGRES_PORT` are not set, the script defaults to `postg
 
 ---
 
-# Azure Data Lake Storage (ADLS Gen2) Integration
+## Azure Data Lake Storage (ADLS Gen2) Integration
 
-## Overview
+### Overview
 
 This phase integrates the banking data platform with Azure Data Lake Storage Gen2 (ADLS Gen2), which serves as the project's cloud-based data lake.
 
@@ -1028,9 +1245,9 @@ The Data Lake is responsible for storing raw Change Data Capture (CDC) events ge
 
 ---
 
-# Azure Resources Created
+### Azure Resources Created
 
-## Storage Account
+#### Storage Account
 
 | Resource               | Value                        |
 | ---------------------- | ---------------------------- |
@@ -1040,7 +1257,7 @@ The Data Lake is responsible for storing raw Change Data Capture (CDC) events ge
 
 ---
 
-## Container
+#### Container
 
 A dedicated container was created to store all project data.
 
@@ -1050,7 +1267,7 @@ bankingdata
 
 ---
 
-## Planned Folder Structure
+#### Planned Folder Structure
 
 ```text
 bankingdata
@@ -1073,13 +1290,13 @@ The project follows the Medallion Architecture:
 
 ---
 
-# Authentication
+### Authentication
 
 Authentication is implemented using an Azure Service Principal instead of storage account keys.
 
 This approach follows Azure security best practices and enables secure programmatic access.
 
-## Service Principal
+#### Service Principal
 
 An Azure App Registration was created with:
 
@@ -1097,7 +1314,7 @@ on the `bankingdeltalake` storage account.
 
 ---
 
-# Environment Variables
+### Environment Variables
 
 Sensitive credentials are stored in the project's `.env` file.
 
@@ -1114,7 +1331,7 @@ This keeps secrets out of source control and enables different environments (dev
 
 ---
 
-# Python Project Structure
+### Python Project Structure
 
 The Python application follows the modern src layout.
 
@@ -1140,7 +1357,7 @@ Using the src layout improves package management, avoids import issues, and foll
 
 ---
 
-# ADLS Client Implementation
+### ADLS Client Implementation
 
 A reusable ADLSClient class was implemented to encapsulate Azure authentication and Data Lake interactions.
 
@@ -1153,7 +1370,7 @@ Responsibilities include:
 
 ---
 
-# Authentication Flow
+### Authentication Flow
 
 ```text
 Application
@@ -1175,7 +1392,7 @@ This approach avoids embedding credentials directly in application code.
 
 ---
 
-# Connection Validation
+### Connection Validation
 
 A reusable connection test was implemented.
 
@@ -1204,7 +1421,7 @@ This verifies:
 
 ---
 
-# Security Best Practices
+### Security Best Practices
 
 The implementation follows several security recommendations:
 
@@ -1216,9 +1433,9 @@ The implementation follows several security recommendations:
 
 ---
 
-# Bronze Layer Implementation
+### Bronze Layer Implementation
 
-## Overview
+#### Overview
 
 The Bronze layer is the first stage of the Medallion Architecture and serves as the landing zone for raw Change Data Capture (CDC) events.
 
@@ -1226,9 +1443,9 @@ Its primary purpose is to store immutable Debezium events exactly as they are re
 
 ---
 
-# Components Implemented
+### Components Implemented
 
-## ADLS Client
+#### ADLS Client
 
 A reusable `ADLSClient` was implemented to encapsulate all Azure Data Lake interactions.
 
@@ -1241,7 +1458,7 @@ Responsibilities:
 
 ---
 
-## Generic Uploader
+#### Generic Uploader
 
 A reusable `ADLSUploader` class was created to handle file uploads to Azure Data Lake.
 
@@ -1254,7 +1471,7 @@ The uploader is intentionally generic so that multiple pipeline components can r
 
 ---
 
-## Bronze Writer
+#### Bronze Writer
 
 The `BronzeWriter` is responsible for writing raw events into the Bronze layer.
 
@@ -1275,7 +1492,7 @@ writer.write(
 
 ---
 
-# Partitioning Strategy
+### Partitioning Strategy
 
 Bronze data is partitioned using ingestion time.
 
@@ -1301,9 +1518,9 @@ Benefits:
 
 ---
 
-# Testing
+### Testing
 
-## ADLS Connection Test
+#### ADLS Connection Test
 
 ```bash
 uv run python -m banking_pipeline.data_lake.test_connection
@@ -1321,7 +1538,7 @@ bankingdata
 
 ---
 
-## Uploader Test
+#### Uploader Test
 ` 
 A sample JSON file was uploaded successfully to:
 
@@ -1338,7 +1555,7 @@ This verified:
 
 ---
 
-## Bronze Writer Test
+#### Bronze Writer Test
 
 The Bronze Writer was tested by uploading a sample customer event.
 
@@ -1369,7 +1586,7 @@ The test confirmed:
 
 ---
 
-# Kafka Consumer
+### Kafka Consumer
 
 A reusable Kafka consumer was implemented using the `confluent-kafka` Python client.
 
@@ -1400,7 +1617,7 @@ This validates that the Python consumer can successfully consume Debezium CDC ev
 
 ---
 
-# Current Pipeline Status
+### Current Pipeline Status
 
 The project currently supports the following end-to-end workflow:
 
@@ -1452,7 +1669,7 @@ This project demonstrates practical experience with:
 
 ---
 
-# Daily Startup Checklist
+## Daily Startup Checklist
 
 Follow these steps whenever you restart your machine.
 
