@@ -651,6 +651,159 @@ Azure Data Lake
 
 ---
 
+### Milestone: Bronze Layer v1 (Parquet)
+
+### Objective
+
+Enhance the Bronze layer by replacing JSON-based event storage with Parquet while keeping the Kafka consumer and Bronze orchestration independent of the storage format.
+
+---
+
+### Features Implemented
+
+#### Writer Architecture Refactor
+
+Introduced a pluggable writer architecture:
+
+```text
+BronzeWriter
+    │
+    ├── JSONWriter
+    └── ParquetWriter
+```
+
+BronzeWriter is now responsible for:
+
+* Bronze folder structure
+* Partitioning
+* File naming
+
+Individual writers are responsible only for serializing and uploading data.
+
+---
+
+#### Generic ADLS Uploader
+
+Enhanced the uploader by introducing a generic `upload_file()` method capable of uploading any file type.
+
+Supported uploads now include:
+
+* JSON
+* Parquet
+* Future formats (CSV, Avro, etc.)
+
+---
+
+#### PyArrow Integration
+
+Added PyArrow for Parquet serialization.
+
+Implemented:
+
+* Dictionary → PyArrow Table conversion
+* Parquet file generation
+* Temporary file management
+* Upload to Azure Data Lake Storage Gen2
+
+---
+
+#### Configuration Driven Output
+
+Introduced:
+
+```
+BRONZE_FILE_FORMAT
+```
+
+The Bronze layer can now switch formats using configuration without modifying application code.
+
+Example:
+
+```
+BRONZE_FILE_FORMAT=parquet
+```
+
+---
+
+### Validation Performed
+
+Successfully validated the complete Bronze ingestion workflow.
+
+Verified:
+
+* Kafka Consumer receives CDC events
+* BronzeWriter creates partitioned folders
+* ParquetWriter generates Parquet files
+* Files uploaded to Azure Data Lake
+* Downloaded Parquet files successfully read using PyArrow
+
+Example verification:
+
+```
+Parquet
+    ↓
+PyArrow
+    ↓
+Pandas DataFrame
+```
+
+---
+
+Verified:
+
+* Kafka Consumer receives CDC events
+* BronzeWriter creates partitioned folders
+* ParquetWriter generates Parquet files
+* Files uploaded to Azure Data Lake
+* Downloaded Parquet files successfully read using PyArrow
+
+Example verification:
+
+```
+Parquet
+    ↓
+PyArrow
+    ↓
+Pandas DataFrame
+```
+
+---
+
+### Current Bronze Architecture
+
+```text
+PostgreSQL
+      │
+      ▼
+Debezium CDC
+      │
+      ▼
+Kafka
+      │
+      ▼
+Generic Consumer
+      │
+      ▼
+BronzeWriter
+      │
+      ▼
+ParquetWriter
+      │
+      ▼
+Azure Data Lake (Bronze)
+```
+
+---
+
+### Next Milestone
+
+Bronze Layer v2
+
+Implement buffered Parquet writing to reduce the small-files problem by batching multiple CDC events into a single Parquet file before uploading to Azure Data Lake.
+
+---
+
+
 ## Current Project Status
 
 ### Phase 1: OLTP Foundation ✅
