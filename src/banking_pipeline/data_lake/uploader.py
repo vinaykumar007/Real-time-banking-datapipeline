@@ -16,11 +16,9 @@ class ADLSUploader:
     ) -> None:
 
         directory_client = self.file_system.get_directory_client(directory)
-
         directory_client.create_directory()
 
         file_client = directory_client.create_file(file_name)
-
         file_client.upload_data(content, overwrite=True)
 
     def upload_json(
@@ -37,3 +35,22 @@ class ADLSUploader:
             file_name=file_name,
             content=json_content,
         )
+
+    def upload_file(
+        self,
+        directory: str,
+        file_name: str,
+        local_file_path: str,
+    ) -> None:
+        """
+        Upload any local file (JSON, Parquet, CSV, etc.)
+        """
+
+        directory_client = self.file_system.get_directory_client(directory)
+        directory_client.create_directory()
+        file_client = directory_client.get_file_client(file_name)
+        with open(local_file_path, "rb") as file:
+            file_client.upload_data(
+                file,
+                overwrite=True,
+            )

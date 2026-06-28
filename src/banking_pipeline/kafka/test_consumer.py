@@ -2,11 +2,13 @@ from banking_pipeline.kafka.consumer import KafkaConsumer
 
 
 def main():
-    consumer = KafkaConsumer(
-        topics=[
-            "banking_server.banking.customers",
-        ]
-    )
+    TOPICS = [
+    "banking_server.banking.customers",
+    "banking_server.banking.accounts",
+    "banking_server.banking.transactions",
+    ]
+
+    consumer = KafkaConsumer(TOPICS)
 
     consumer.consume()
 

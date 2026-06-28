@@ -516,6 +516,93 @@ Insert or update records in PostgreSQL and observe CDC events appearing in Kafka
 
 ---
 
+## Service Health Checks and Pipeline Validation
+
+Use the checks below to confirm that the stack is healthy and that the data pipeline is producing data correctly.
+
+### 1. Confirm containers are running
+
+```powershell
+docker compose ps
+```
+
+All core services should show as running or up, including `postgres`, `kafka`, `connect`, `airflow-webserver`, and `airflow-scheduler`.
+
+### 2. Check service logs
+
+```powershell
+docker compose logs -f postgres kafka connect airflow-scheduler airflow-webserver
+```
+
+Useful signs of health:
+
+- PostgreSQL starts successfully
+- Debezium connects to PostgreSQL and Kafka without repeated errors
+- Airflow scheduler and webserver stay healthy
+
+### 3. Check web UI endpoints
+
+- Airflow UI: http://localhost:8080
+- Kafka UI: http://localhost:8090
+- pgAdmin: http://localhost:5050
+- Debezium Connect: http://localhost:8083/connectors
+
+### 4. Validate the data generator
+
+Run the generator from the project root:
+
+```powershell
+uv run python -m banking_pipeline.data_generator.generate_data
+```
+
+Then verify that the source tables contain data:
+
+```powershell
+docker compose exec postgres psql -U postgres -d banking_db -c "SELECT COUNT(*) AS customers FROM banking.customers; SELECT COUNT(*) AS accounts FROM banking.accounts; SELECT COUNT(*) AS transactions FROM banking.transactions;"
+```
+
+If your local Postgres credentials differ, replace `postgres` and `banking_db` with your configured values.
+
+### 5. Validate CDC and Kafka flow
+
+Confirm that the Debezium connector is running:
+
+```powershell
+Invoke-RestMethod http://localhost:8083/connectors/postgres-connector/status
+```
+
+List available Kafka topics:
+
+```powershell
+docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list
+```
+
+### Handy debugging commands
+
+```powershell
+# Rebuild and restart a specific service
+docker compose up -d --build <service-name>
+
+# Restart everything
+docker compose restart
+
+# View logs for one service
+docker compose logs -f <service-name>
+
+# Open a shell inside a container
+docker compose exec <service-name> bash
+```
+
+Examples:
+
+```powershell
+docker compose logs -f kafka
+docker compose logs -f connect
+docker compose logs -f airflow-scheduler
+```
+
+---
+
 ## Key Learnings
 
 * PostgreSQL WAL-based CDC
@@ -529,6 +616,38 @@ Insert or update records in PostgreSQL and observe CDC events appearing in Kafka
 * Real-Time Data Streaming
 
 This CDC layer forms the foundation for the downstream Bronze → Silver → Gold Medallion Architecture implemented using PySpark Structured Streaming.
+
+---
+
+## Milestones
+
+### Milestone: Bronze Storage Refactor ✅
+
+**Completed:** Refactored Bronze storage architecture with pluggable writer layer
+
+#### Completed Work
+
+- Refactored Bronze storage architecture
+- Introduced a pluggable writer layer
+- Implemented `JSONWriter`
+- Implemented `ParquetWriter`
+- Added generic `upload_file()` to ADLS uploader
+- Verified PyArrow integration
+- Successfully uploaded the first Parquet file to Azure Data Lake
+
+#### Resulting Architecture
+
+```text
+Kafka Consumer
+     ↓
+BronzeWriter
+     ↓
+JSONWriter / ParquetWriter
+     ↓
+ADLSUploader
+     ↓
+Azure Data Lake
+```
 
 ---
 
@@ -565,7 +684,7 @@ This CDC layer forms the foundation for the downstream Bronze → Silver → Gol
 * [x] Generic ADLS uploader
 * [x] Bronze writer
 * [x] Raw zone ingestion test
-* [ ] Parquet storage
+* [x] Parquet storage
 
 ### Phase 5: Snowflake
 
@@ -1050,7 +1169,7 @@ bankingdata
 ---
 
 ## Uploader Test
-
+` 
 A sample JSON file was uploaded successfully to:
 
 ```text
@@ -1180,3 +1299,233 @@ This project demonstrates practical experience with:
 
 ---
 
+# Daily Startup Checklist
+
+Follow these steps whenever you restart your machine.
+
+---
+
+## 1. Start Docker Desktop
+
+Wait until Docker Desktop is fully started.
+
+Verify:
+
+```bash
+docker version
+```
+
+---
+
+## 2. Start all services
+
+From the project root:
+
+```bash
+docker compose up -d
+```
+
+---
+
+## 3. Verify running containers
+
+```bash
+docker ps
+```
+
+Expected containers:
+
+- PostgreSQL (Banking)
+- PostgreSQL (Airflow)
+- ZooKeeper
+- Kafka
+- Debezium Connect
+- Kafka UI
+- pgAdmin
+- Airflow Scheduler
+- Airflow Webserver
+
+---
+
+## 4. Verify Debezium Connect
+
+```powershell
+Invoke-RestMethod http://localhost:8083/
+```
+
+Expected:
+
+```json
+{
+  "version": "3.x.x"
+}
+```
+
+---
+
+## 5. Verify PostgreSQL Connector
+
+```powershell
+Invoke-RestMethod http://localhost:8083/connectors/postgres-connector/status | ConvertTo-Json -Depth 5
+```
+
+Expected:
+
+```text
+connector.state = RUNNING
+task.state      = RUNNING
+```
+
+---
+
+## 6. Verify Airflow
+
+Open:
+
+http://localhost:8080
+
+Verify:
+
+- Scheduler is running
+- DAGs are visible
+
+---
+
+## 7. Verify pgAdmin
+
+Open:
+
+http://localhost:5050
+
+Verify:
+
+- Banking PostgreSQL is connected
+- Airflow PostgreSQL is connected
+
+---
+
+## 8. Verify Kafka UI
+
+Open:
+
+http://localhost:8090
+
+Verify:
+
+- Cluster is online
+- Topics exist
+
+Expected topics:
+
+- banking_server.banking.customers
+- banking_server.banking.accounts
+- banking_server.banking.transactions
+
+---
+
+## 9. Verify Azure ADLS Connection
+
+```bash
+uv run python -m banking_pipeline.data_lake.test_connection
+```
+
+Expected:
+
+```
+Connected to Azure Data Lake!
+```
+
+---
+
+## 10. Activate Python Environment
+
+```bash
+uv sync
+```
+
+(Optional if dependencies are already installed.)
+
+---
+
+## 11. Start Kafka Consumer
+
+```bash
+uv run python -m banking_pipeline.kafka.test_consumer
+```
+
+---
+
+## 12. Test CDC Pipeline
+
+Insert a record into PostgreSQL.
+
+Expected flow:
+
+```
+PostgreSQL
+      ↓
+Debezium
+      ↓
+Kafka
+      ↓
+Python Consumer
+      ↓
+Azure ADLS Bronze
+```
+
+Verify:
+
+- Consumer receives event
+- New Bronze file appears in ADLS
+
+---
+
+## Useful Commands
+
+### Check running containers
+
+```bash
+docker ps
+```
+
+### Restart all services
+
+```bash
+docker compose restart
+```
+
+### Stop all services
+
+```bash
+docker compose down
+```
+
+### View Debezium logs
+
+```bash
+docker logs real-time-banking-datapipeline-connect-1 --tail 50
+```
+
+### View Kafka logs
+
+```bash
+docker logs kafka --tail 50
+```
+
+### View Airflow Webserver logs
+
+```bash
+docker logs airflow-webserver --tail 50
+```
+
+### View Airflow Scheduler logs
+
+```bash
+docker logs airflow-scheduler --tail 50
+```
+
+### Check Kafka Consumer Group
+
+```bash
+docker exec kafka kafka-consumer-groups --bootstrap-server kafka:9092 --describe --group banking-consumer-group
+```
