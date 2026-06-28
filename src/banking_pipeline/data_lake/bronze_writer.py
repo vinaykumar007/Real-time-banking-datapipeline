@@ -1,11 +1,18 @@
 from datetime import datetime
 
-from banking_pipeline.data_lake.uploader import ADLSUploader
+
+
+from banking_pipeline.data_lake.config import BRONZE_FILE_FORMAT
+from banking_pipeline.data_lake.writers.json_writer import JSONWriter
+from banking_pipeline.data_lake.writers.parquet_writer import ParquetWriter
 
 
 class BronzeWriter:
     def __init__(self):
-        self.uploader = ADLSUploader()
+        if BRONZE_FILE_FORMAT == "parquet":
+            self.writer = ParquetWriter()
+        else:
+            self.writer = JSONWriter()
 
     def write(self, table_name: str, data: dict) -> None:
         now = datetime.utcnow()
@@ -18,12 +25,15 @@ class BronzeWriter:
             f"hour={now.hour:02d}"
         )
 
-        file_name = (
-            f"{table_name}_"
-            f"{now.strftime('%Y%m%d_%H%M%S_%f')}.json"
-        )
+        extension = "parquet" if BRONZE_FILE_FORMAT == "parquet" else "json"
 
-        self.uploader.upload_json(
+        file_name = (
+                    f"{table_name}_"
+                    f"{now.strftime('%Y%m%d_%H%M%S_%f')}."
+                    f"{extension}"
+                    )
+
+        self.writer.write(
             directory=directory,
             file_name=file_name,
             data=data,

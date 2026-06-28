@@ -167,6 +167,10 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
+# Airflow
+docker/logs/
+docker/logs/**
+
 # mkdocs documentation
 /site
 
@@ -212,6 +216,9 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 banking_data_pipeline/profiles.yml
+
+# PostgreSQL runtime data
+docker/postgres/data/
 
 # Marimo
 marimo/_static/

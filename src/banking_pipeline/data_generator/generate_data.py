@@ -11,12 +11,9 @@ from faker import Faker
 from sqlalchemy import text
 
 try:
-    from data_generator.database import db
-except ModuleNotFoundError:
-    # When running the script directly (python data_generator/generate_data.py)
-    # the package root may not be on sys.path. Add the project root so
-    # imports like `data_generator.database` resolve correctly.
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from .database import db
+except ImportError:
+    # Fallback for direct script execution without package context.
     from data_generator.database import db
 
 fake = Faker()
