@@ -32,10 +32,10 @@ if missing_vars:
     )
 
 if not os.getenv("POSTGRES_HOST"):
-    print("⚠️ POSTGRES_HOST is not set; defaulting to 'postgres' for Debezium container networking.")
+    print("Warning: POSTGRES_HOST is not set; defaulting to 'postgres' for Debezium container networking.")
 
 if not os.getenv("POSTGRES_PORT"):
-    print("⚠️ POSTGRES_PORT is not set; defaulting to '5432'.")
+    print("Warning: POSTGRES_PORT is not set; defaulting to '5432'.")
 
 # -----------------------------
 # Build connector JSON in memory
@@ -71,8 +71,8 @@ response = requests.post(url, headers=headers, json=connector_config)
 # Debug/Output
 # -----------------------------
 if response.status_code == 201:
-    print("✅ Connector created successfully!")
+    print("Connector created successfully!")
 elif response.status_code == 409:
-    print("⚠️ Connector already exists.")
+    print("Connector already exists.")
 else:
-    print(f"❌ Failed to create connector ({response.status_code}): {response.text}")
+    print(f"Failed to create connector ({response.status_code}): {response.text}")

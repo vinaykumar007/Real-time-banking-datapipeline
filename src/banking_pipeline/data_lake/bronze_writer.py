@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from banking_pipeline.data_lake.uploader import ADLSUploader
+from banking_pipeline.data_lake.writers.json_writer import JSONWriter
 
 
 class BronzeWriter:
     def __init__(self):
-        self.uploader = ADLSUploader()
+        self.writer = JSONWriter()
 
     def write(self, table_name: str, data: dict) -> None:
         now = datetime.utcnow()
@@ -23,7 +23,7 @@ class BronzeWriter:
             f"{now.strftime('%Y%m%d_%H%M%S_%f')}.json"
         )
 
-        self.uploader.upload_json(
+        self.writer.write(
             directory=directory,
             file_name=file_name,
             data=data,

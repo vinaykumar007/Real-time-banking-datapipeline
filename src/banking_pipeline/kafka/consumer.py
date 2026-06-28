@@ -1,4 +1,8 @@
 from confluent_kafka import Consumer
+from datetime import datetime
+import json
+
+from banking_pipeline.data_lake.bronze_writer import BronzeWriter
 
 from banking_pipeline.kafka.config import (
     KAFKA_AUTO_OFFSET_RESET,
@@ -6,9 +10,17 @@ from banking_pipeline.kafka.config import (
     KAFKA_GROUP_ID,
 )
 
+CDC_OPERATIONS = {
+    "c": "INSERT",
+    "u": "UPDATE",
+    "d": "DELETE",
+    "r": "SNAPSHOT",
+}
+
 
 class KafkaConsumer:
     def __init__(self, topics: list[str]):
+        self.bronze_writer = BronzeWriter()
         self.consumer = Consumer(
             {
                 "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
@@ -34,10 +46,34 @@ class KafkaConsumer:
                     print(msg.error())
                     continue
 
-                print(f"Topic : {msg.topic()}")
-                print(f"Partition : {msg.partition()}")
-                print(f"Offset : {msg.offset()}")
-                print(msg.value().decode("utf-8"))
+                event = json.loads(msg.value().decode("utf-8"))
+
+                payload = event["payload"]
+                source = payload["source"]
+                table_name = source["table"]
+                bronze_record = {
+                                 "ingestion_timestamp": datetime.utcnow().isoformat(),
+                                 "topic": msg.topic(),
+                                 "partition": msg.partition(),
+                                 "offset": msg.offset(),
+                                 "payload": payload,
+                                 }
+                
+                
+
+                self.bronze_writer.write(
+                                         table_name=table_name,
+                                                             data=bronze_record,
+                                        )
+
+                
+                print(f"✅ Bronze event written")
+                print(f"Topic      : {msg.topic()}")
+                print(f"Table      : {table_name}")
+                operation = CDC_OPERATIONS.get(payload["op"], payload["op"])
+
+                print(f"Operation  : {operation}")
+                print(f"Offset     : {msg.offset()}")
                 print("-" * 80)
 
         except KeyboardInterrupt:
