@@ -4,7 +4,7 @@ import json
 
 from banking_pipeline.data_lake.bronze_writer import BronzeWriter
 from banking_pipeline.data_lake.buffer import EventBuffer
-from banking_pipeline.data_lake.config import BRONZE_BUFFER_SIZE
+from banking_pipeline.data_lake.config import (BRONZE_BUFFER_SIZE, BRONZE_FLUSH_INTERVAL_SECONDS,)
 
 from banking_pipeline.kafka.config import (
     KAFKA_AUTO_OFFSET_RESET,
@@ -34,7 +34,25 @@ class KafkaConsumer:
 
         self.consumer.subscribe(topics)
         print(f"Connecting to Kafka: {KAFKA_BOOTSTRAP_SERVERS}")
+    def _flush_buffer(
+                      self,table_name: str,reason: str,) -> None:
+        """
+        Flush buffered events to the Bronze layer.
+        """
 
+        print(
+            f"\n🚀 Flushing buffer ({reason}) "
+            f"- {self.buffer.size()} events"
+        )
+
+        self.bronze_writer.write(
+            table_name=table_name,
+            events=self.buffer.get_events(),
+        )
+
+        self.buffer.clear()
+
+        print("✅ Buffer cleared\n")
     def consume(self):
         print("🚀 Kafka Consumer started... Press Ctrl+C to stop.\n")
 
@@ -62,20 +80,21 @@ class KafkaConsumer:
                                  "payload": payload,
                                  }
                 self.buffer.add(bronze_record)
+                flush_reason = None
+
                 if self.buffer.is_full():
-                    print(
-                        f"\n🚀 Buffer full ({self.buffer.size()} events). "
-                        f"Writing batch to ADLS..."
-                    )
+                    flush_reason = "BUFFER SIZE"
 
-                    self.bronze_writer.write(
+                elif self.buffer.should_flush(
+                    BRONZE_FLUSH_INTERVAL_SECONDS
+                ):
+                    flush_reason = "TIME INTERVAL"
+
+                if flush_reason:
+                    self._flush_buffer(
                         table_name=table_name,
-                        events=self.buffer.get_events(),
+                        reason=flush_reason,
                     )
-
-                    self.buffer.clear()
-
-                    print("✅ Buffer cleared\n")
 
                 operation = CDC_OPERATIONS.get(
                                                payload["op"],
@@ -88,7 +107,16 @@ class KafkaConsumer:
                 )
 
         except KeyboardInterrupt:
-            print("\nStopping consumer...")
+            print("\n🛑 Shutdown requested.")
+        
+            if self.buffer.size() > 0:
+                self._flush_buffer(
+                    table_name=table_name,
+                    reason="SHUTDOWN",
+                )
+        
+            print("👋 Kafka consumer stopped.")
+
 
         finally:
             self.consumer.close()

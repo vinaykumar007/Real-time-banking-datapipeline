@@ -886,6 +886,45 @@ Compared to writing one file per event, buffered ingestion provides:
 
 ---
 
+### Milestone: Bronze Layer v3 (Production-Ready Buffering)
+
+### Objective
+
+Enhance the Bronze ingestion layer by implementing production-style buffering to improve reliability and reduce the small-files problem.
+
+### Features Implemented
+
+* Added **time-based flushing** using a configurable `BRONZE_FLUSH_INTERVAL_SECONDS` setting.
+* Enhanced `EventBuffer` to track the timestamp of the first buffered event and determine when buffered data should be flushed.
+* Refactored the Kafka consumer by extracting buffer flushing into a reusable `_flush_buffer()` method, improving code readability and maintainability.
+* Implemented **graceful shutdown**, ensuring all buffered events are written to Azure Data Lake before the consumer exits.
+
+### Validation
+
+Successfully verified all buffering scenarios:
+
+* Buffer flushes automatically when the configured **buffer size** is reached.
+* Buffer flushes automatically after the configured **time interval** even when the buffer is not full.
+* Remaining buffered events are safely persisted during application shutdown (`Ctrl + C`).
+
+### Bronze Layer Status
+
+The Bronze ingestion layer is now production-ready with:
+
+* Generic Kafka Consumer
+* EventBuffer with configurable buffering
+* Size-based flushing
+* Time-based flushing
+* Graceful shutdown handling
+* Parquet-based Bronze storage
+* Azure Data Lake Storage Gen2 integration
+
+### Next Milestone
+
+Integrate the Bronze layer with **Snowflake** by implementing Storage Integration, External Stages, Snowpipe, and the Raw ingestion layer.
+
+---
+
 ## Current Bronze Architecture
 
 ```text
@@ -930,7 +969,7 @@ During this milestone, the following production data engineering concepts were i
 
 ---
 
-## Next Milestone
+### Next Milestone
 
 Complete the Bronze layer by implementing time-based buffer flushing.
 
@@ -958,68 +997,13 @@ Example verification:
 
 ```
 Parquet
-    ↓
+      ↓
 PyArrow
-    ↓
+      ↓
 Pandas DataFrame
 ```
 
 ---
-
-Verified:
-
-* Kafka Consumer receives CDC events
-* BronzeWriter creates partitioned folders
-* ParquetWriter generates Parquet files
-* Files uploaded to Azure Data Lake
-* Downloaded Parquet files successfully read using PyArrow
-
-Example verification:
-
-```
-Parquet
-    ↓
-PyArrow
-    ↓
-Pandas DataFrame
-```
-
----
-
-### Current Bronze Architecture
-
-```text
-PostgreSQL
-      │
-      ▼
-Debezium CDC
-      │
-      ▼
-Kafka
-      │
-      ▼
-Generic Consumer
-      │
-      ▼
-BronzeWriter
-      │
-      ▼
-ParquetWriter
-      │
-      ▼
-Azure Data Lake (Bronze)
-```
-
----
-
-### Next Milestone
-
-Bronze Layer v2
-
-Implement buffered Parquet writing to reduce the small-files problem by batching multiple CDC events into a single Parquet file before uploading to Azure Data Lake.
-
----
-
 
 ## Current Project Status
 

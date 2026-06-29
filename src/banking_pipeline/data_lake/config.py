@@ -11,6 +11,13 @@ BRONZE_BUFFER_SIZE = int(
     )
 )
 
+BRONZE_FLUSH_INTERVAL_SECONDS = int(
+    os.getenv(
+        "BRONZE_FLUSH_INTERVAL_SECONDS",
+        "30",
+    )
+)
+
 BRONZE_FILE_FORMAT = os.getenv(
     "BRONZE_FILE_FORMAT",
     "json",

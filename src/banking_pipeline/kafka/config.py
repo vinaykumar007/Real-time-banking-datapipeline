@@ -18,3 +18,4 @@ KAFKA_AUTO_OFFSET_RESET = os.getenv(
     "KAFKA_AUTO_OFFSET_RESET",
     "earliest",
 )
+
