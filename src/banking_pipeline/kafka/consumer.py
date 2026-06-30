@@ -24,6 +24,7 @@ class KafkaConsumer:
     def __init__(self, topics: list[str]):
         self.buffer = EventBuffer(max_size=BRONZE_BUFFER_SIZE)
         self.bronze_writer = BronzeWriter()
+
         self.consumer = Consumer(
             {
                 "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
@@ -34,31 +35,51 @@ class KafkaConsumer:
 
         self.consumer.subscribe(topics)
         print(f"Connecting to Kafka: {KAFKA_BOOTSTRAP_SERVERS}")
-    def _flush_buffer(
-                      self,table_name: str,reason: str,) -> None:
+
+    def _flush_buffer(self, reason: str) -> None:
         """
         Flush buffered events to the Bronze layer.
         """
 
+        events = self.buffer.get_events()
+
+        if not events:
+            return
+
+        table_name = events[0]["payload"]["source"]["table"]
+
         print(
             f"\n🚀 Flushing buffer ({reason}) "
-            f"- {self.buffer.size()} events"
+            f"- {len(events)} events"
         )
 
         self.bronze_writer.write(
             table_name=table_name,
-            events=self.buffer.get_events(),
+            events=events,
         )
 
         self.buffer.clear()
 
         print("✅ Buffer cleared\n")
+
     def consume(self):
         print("🚀 Kafka Consumer started... Press Ctrl+C to stop.\n")
 
         try:
             while True:
+
                 msg = self.consumer.poll(1.0)
+
+                # -------------------------------------------------
+                # Time-based flush
+                # -------------------------------------------------
+                if (
+                    self.buffer.size() > 0
+                    and self.buffer.should_flush(
+                        BRONZE_FLUSH_INTERVAL_SECONDS
+                    )
+                ):
+                    self._flush_buffer("TIME INTERVAL")
 
                 if msg is None:
                     continue
@@ -72,33 +93,21 @@ class KafkaConsumer:
                 payload = event["payload"]
                 source = payload["source"]
                 table_name = source["table"]
+
                 bronze_record = {
-                                 "ingestion_timestamp": datetime.utcnow().isoformat(),
-                                 "topic": msg.topic(),
-                                 "partition": msg.partition(),
-                                 "offset": msg.offset(),
-                                 "payload": payload,
-                                 }
+                    "ingestion_timestamp": datetime.utcnow().isoformat(),
+                    "topic": msg.topic(),
+                    "partition": msg.partition(),
+                    "offset": msg.offset(),
+                    "payload": payload,
+                }
+
                 self.buffer.add(bronze_record)
-                flush_reason = None
-
-                if self.buffer.is_full():
-                    flush_reason = "BUFFER SIZE"
-
-                elif self.buffer.should_flush(
-                    BRONZE_FLUSH_INTERVAL_SECONDS
-                ):
-                    flush_reason = "TIME INTERVAL"
-
-                if flush_reason:
-                    self._flush_buffer(
-                        table_name=table_name,
-                        reason=flush_reason,
-                    )
 
                 operation = CDC_OPERATIONS.get(
-                                               payload["op"],
-                                               payload["op"],)
+                    payload["op"],
+                    payload["op"],
+                )
 
                 print(
                     f"📦 Buffered ({self.buffer.size()}/{self.buffer.max_size}) | "
@@ -106,17 +115,18 @@ class KafkaConsumer:
                     f"Operation: {operation}"
                 )
 
+                # -------------------------------------------------
+                # Size-based flush
+                # -------------------------------------------------
+                if self.buffer.is_full():
+                    self._flush_buffer("BUFFER SIZE")
+
         except KeyboardInterrupt:
             print("\n🛑 Shutdown requested.")
-        
-            if self.buffer.size() > 0:
-                self._flush_buffer(
-                    table_name=table_name,
-                    reason="SHUTDOWN",
-                )
-        
-            print("👋 Kafka consumer stopped.")
 
+            self._flush_buffer("SHUTDOWN")
+
+            print("👋 Kafka consumer stopped.")
 
         finally:
             self.consumer.close()

@@ -1,0 +1,10 @@
+USE ROLE ACCOUNTADMIN;
+
+CREATE OR REPLACE NOTIFICATION INTEGRATION banking_notification_integration
+TYPE = QUEUE
+ENABLED = TRUE
+NOTIFICATION_PROVIDER = AZURE_STORAGE_QUEUE
+AZURE_STORAGE_QUEUE_PRIMARY_URI = 'https://bankingdeltalake.queue.core.windows.net/banking-snowpipe-events'
+AZURE_TENANT_ID = '28700bae-5447-4e40-a3a3-63630bfc6108';
+
+DESC NOTIFICATION INTEGRATION banking_notification_integration;

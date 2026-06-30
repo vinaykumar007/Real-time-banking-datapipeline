@@ -1,0 +1,29 @@
+USE ROLE ACCOUNTADMIN;
+
+USE DATABASE BANKING_DB;
+
+USE SCHEMA RAW;
+
+CREATE OR REPLACE TABLE RAW_EVENTS (
+
+    event_id NUMBER AUTOINCREMENT,
+
+    ingestion_timestamp TIMESTAMP_NTZ,
+
+    topic STRING,
+
+    partition NUMBER,
+
+    offset NUMBER,
+
+    table_name STRING,
+
+    operation STRING,
+
+    payload VARIANT,
+
+    loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+
+);
+
+SHOW TABLES IN SCHEMA RAW;

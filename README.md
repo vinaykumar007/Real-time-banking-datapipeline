@@ -886,122 +886,100 @@ Compared to writing one file per event, buffered ingestion provides:
 
 ---
 
-### Milestone: Bronze Layer v3 (Production-Ready Buffering)
+### Milestone 5: Event-Driven Snowflake Ingestion Complete ✅
 
-### Objective
+#### Objective
 
-Enhance the Bronze ingestion layer by implementing production-style buffering to improve reliability and reduce the small-files problem.
+Implemented a fully automated, event-driven ingestion pipeline that loads Bronze Parquet files from Azure Data Lake Storage Gen2 into Snowflake using Azure Event Grid, Storage Queue, Notification Integration, and Snowpipe.
 
-### Features Implemented
+#### What Was Implemented
 
-* Added **time-based flushing** using a configurable `BRONZE_FLUSH_INTERVAL_SECONDS` setting.
-* Enhanced `EventBuffer` to track the timestamp of the first buffered event and determine when buffered data should be flushed.
-* Refactored the Kafka consumer by extracting buffer flushing into a reusable `_flush_buffer()` method, improving code readability and maintainability.
-* Implemented **graceful shutdown**, ensuring all buffered events are written to Azure Data Lake before the consumer exits.
+##### Azure Data Lake → Snowflake Integration
 
-### Validation
+* Created Snowflake Storage Integration for secure ADLS Gen2 access.
+* Configured Azure RBAC permissions using Storage Blob Data Reader.
+* Created a reusable Parquet File Format.
+* Configured an External Stage pointing to the Bronze layer in ADLS.
 
-Successfully verified all buffering scenarios:
+##### Event-Driven Auto Ingestion
 
-* Buffer flushes automatically when the configured **buffer size** is reached.
-* Buffer flushes automatically after the configured **time interval** even when the buffer is not full.
-* Remaining buffered events are safely persisted during application shutdown (`Ctrl + C`).
+* Created Azure Storage Queue for Snowpipe notifications.
+* Configured Snowflake Notification Integration.
+* Granted Azure Storage Queue Data Contributor permissions.
+* Created Azure Event Grid Subscription to monitor new Bronze Parquet files.
+* Configured Snowpipe with `AUTO_INGEST = TRUE` for automatic loading.
 
-### Bronze Layer Status
+##### Snowflake Raw Layer
 
-The Bronze ingestion layer is now production-ready with:
+* Created an immutable `RAW_EVENTS` landing table.
+* Mapped Parquet files directly into Snowflake.
+* Extracted CDC metadata including:
+  * `ingestion_timestamp`
+  * `topic`
+  * `partition`
+  * `offset`
+  * `table_name`
+  * `operation`
+  * `payload`
+  * `loaded_at`
 
-* Generic Kafka Consumer
-* EventBuffer with configurable buffering
-* Size-based flushing
-* Time-based flushing
-* Graceful shutdown handling
-* Parquet-based Bronze storage
-* Azure Data Lake Storage Gen2 integration
+##### Consumer Improvements
 
-### Next Milestone
+* Implemented configurable buffer size.
+* Added configurable time-based flushing.
+* Fixed time-based flush logic to execute even during Kafka idle periods.
+* Added graceful shutdown flushing to prevent data loss.
 
-Integrate the Bronze layer with **Snowflake** by implementing Storage Integration, External Stages, Snowpipe, and the Raw ingestion layer.
+#### End-to-End Validation
 
----
-
-## Current Bronze Architecture
+Successfully validated the complete real-time pipeline:
 
 ```text
 PostgreSQL
       │
-      ▼
 Debezium CDC
       │
-      ▼
 Kafka
       │
-      ▼
-Kafka Consumer
+Python Consumer
       │
-      ▼
-EventBuffer
+Bronze Parquet (ADLS)
       │
-      ▼
-BronzeWriter
+Azure Event Grid
       │
-      ▼
-ParquetWriter
+Azure Storage Queue
       │
-      ▼
-Azure Data Lake Storage
+Snowflake Notification Integration
+      │
+Snowpipe (AUTO_INGEST)
+      │
+RAW_EVENTS
 ```
 
----
+Verified that newly inserted PostgreSQL records were automatically loaded into Snowflake without requiring manual `ALTER PIPE ... REFRESH`.
 
-## Key Concepts Learned
+#### Technologies Covered
 
-During this milestone, the following production data engineering concepts were implemented and validated:
+* PostgreSQL
+* Debezium
+* Apache Kafka
+* Python
+* Azure Data Lake Storage Gen2
+* Azure Event Grid
+* Azure Storage Queue
+* Snowflake Storage Integration
+* Snowflake Notification Integration
+* Snowpipe Auto Ingest
+* Parquet
 
-* Micro-batch processing
-* Event buffering
-* Small-files optimization
-* Configuration-driven application behavior
-* Separation of concerns
-* Pluggable writer architecture
-* Columnar storage using Parquet
-* Azure Data Lake ingestion
+#### Key Learnings
 
----
-
-### Next Milestone
-
-Complete the Bronze layer by implementing time-based buffer flushing.
-
-The buffer should flush when either:
-
-* The configured buffer size is reached, or
-* A configurable time interval has elapsed.
-
-This ensures low-latency ingestion even during periods of low event volume and aligns the ingestion pipeline with production streaming architectures.
-
-
-### Validation Performed
-
-Successfully validated the complete Bronze ingestion workflow.
-
-Verified:
-
-* Kafka Consumer receives CDC events
-* BronzeWriter creates partitioned folders
-* ParquetWriter generates Parquet files
-* Files uploaded to Azure Data Lake
-* Downloaded Parquet files successfully read using PyArrow
-
-Example verification:
-
-```
-Parquet
-      ↓
-PyArrow
-      ↓
-Pandas DataFrame
-```
+* Implemented secure Azure AD authentication between ADLS and Snowflake.
+* Built a cloud-native event-driven ingestion architecture.
+* Configured Azure Event Grid and Storage Queue for automatic notifications.
+* Understood Snowpipe auto-ingestion workflow and notification-based loading.
+* Debugged Azure resource provider registration, RBAC permissions, and consumer flush timing issues.
+* Built an enterprise-grade Bronze → Snowflake ingestion foundation.
 
 ---
 
@@ -1042,7 +1020,7 @@ Pandas DataFrame
 
 ### Phase 5: Snowflake
 
-* [ ] Bronze layer
+* [x] Bronze layer
 * [ ] Silver layer
 * [ ] Gold layer
 
