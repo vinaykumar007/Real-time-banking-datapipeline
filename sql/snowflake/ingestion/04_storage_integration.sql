@@ -1,0 +1,14 @@
+
+
+DESC STORAGE INTEGRATION banking_adls_integration;
+
+USE ROLE ACCOUNTADMIN;
+
+CREATE OR REPLACE STORAGE INTEGRATION banking_adls_integration
+TYPE = EXTERNAL_STAGE
+STORAGE_PROVIDER = AZURE
+ENABLED = TRUE
+AZURE_TENANT_ID = ''
+STORAGE_ALLOWED_LOCATIONS = (
+    'azure://b.blob.core.windows.net/'
+);
